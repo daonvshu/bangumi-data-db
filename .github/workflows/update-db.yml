@@ -1,0 +1,37 @@
+name: Publish DB to GitHub Pages
+
+on:
+  schedule:
+    # 每天北京时间凌晨4点（即 UTC 20:00）
+    - cron: '0 20 * * *'
+  workflow_dispatch: # 允许手动触发
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run script to generate bangumi.db
+        run: npx ts-node save-bangumi-to-db.ts
+
+      # 部署到 gh-pages
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: .
+          publish_branch: gh-pages
+          force_orphan: true
+          enable_jekyll: false
+          keep_files: false
