@@ -24,13 +24,18 @@ jobs:
 
       - name: Run script to generate bangumi.db
         run: npx ts-node scripts/gen.ts
+    
+      - name: Prepare dist folder for gh-pages
+        run: |
+          mkdir -p dist
+          mv bangumi.db dist/
 
       # 部署到 gh-pages
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: .
+          publish_dir: ./dist
           publish_branch: gh-pages
           force_orphan: true
           enable_jekyll: false
