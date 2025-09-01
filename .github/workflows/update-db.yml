@@ -23,7 +23,7 @@ jobs:
         run: npm install
 
       - name: Run script to generate bangumi.db
-        run: npx ts-node srcipts/gen.ts
+        run: npx ts-node scripts/gen.ts
 
       # 部署到 gh-pages
       - name: Deploy to GitHub Pages
