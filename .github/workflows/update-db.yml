@@ -23,12 +23,14 @@ jobs:
         run: npm install
 
       - name: Run script to generate bangumi.db
-        run: npx ts-node scripts/gen.ts
+        run: npm run gen-db
     
       - name: Prepare dist folder for gh-pages
         run: |
+          DATE=$(date +'%Y-%m-%d')
           mkdir -p dist
-          mv bangumi.db dist/
+          cp bangumi.db dist/bangumi-latest.db
+          mv bangumi.db dist/bangumi-$DATE.db
 
       # 部署到 gh-pages
       - name: Deploy to GitHub Pages
@@ -37,6 +39,6 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
           publish_branch: gh-pages
-          force_orphan: true
+          force_orphan: false
           enable_jekyll: false
-          keep_files: false
+          keep_files: true
