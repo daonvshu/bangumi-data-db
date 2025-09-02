@@ -1,6 +1,8 @@
 import Database from "better-sqlite3";
 import { items, siteMeta } from "bangumi-data";
 import type { Item, Site, SiteList } from "bangumi-data";
+import fs from "fs";
+import crypto from "crypto";
 
 const db = new Database("bangumi.db");
 
@@ -23,9 +25,20 @@ function extractBroadcastBegin(broadcast?: string): number | null {
   return null;
 }
 
+// 计算文件 SHA256
+function fileHash(path: string): string {
+  const buffer = fs.readFileSync(path);
+  return crypto.createHash("sha256").update(buffer).digest("hex");
+}
+
 // 🚀 创建数据库表
 function createTables() {
   db.exec(`
+    CREATE TABLE IF NOT EXISTS meta (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,
@@ -94,6 +107,51 @@ function resolveUrl(site: Site): { url: string | null; urlTemplate: string | nul
     return { url: urlTemplate.replace("{{id}}", (site as any).id), urlTemplate };
   }
   return { url: null, urlTemplate };
+}
+
+// 🚀 插入版本信息和生成时间
+function insertMeta() {
+  // 读取 bangumi-data 版本
+  const bangumiPkgPath = require.resolve("bangumi-data/package.json");
+  const bangumiPkg = JSON.parse(fs.readFileSync(bangumiPkgPath, "utf8"));
+  const version = bangumiPkg.version;
+
+  // 计算数据文件 checksum
+  const dataJsonPath = require.resolve("bangumi-data/dist/data.json");
+  const checksum = fileHash(dataJsonPath);
+
+  // 统计 item / site 数量
+  const itemCount = (db.prepare("SELECT COUNT(*) as c FROM items").get() as { c: number }).c;
+  const siteCount = (db.prepare("SELECT COUNT(*) as c FROM sites").get() as { c: number }).c;
+
+  // 当前时间
+  const ts = Date.now();
+  const iso = new Date(ts).toISOString();
+
+  // 环境信息
+  const generator = "https://github.com/daonvshu/bangumi-data-db";
+  const nodeVersion = process.version;
+  const sqliteVersion = (db.prepare("select sqlite_version() as v").get() as { v: string }).v;
+
+  // 准备存入
+  const insert = db.prepare(`
+    INSERT INTO meta (key, value)
+    VALUES (?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+  `);
+
+  insert.run("version", version);
+  insert.run("generated_at", ts.toString());
+  insert.run("generated_at_iso", iso);
+  insert.run("generator", generator);
+  insert.run("node_version", nodeVersion);
+  insert.run("sqlite_version", sqliteVersion);
+  insert.run("item_count", itemCount.toString());
+  insert.run("site_count", siteCount.toString());
+  insert.run("data_checksum", checksum);
+
+  console.log("✅ meta 信息已写入");
+  console.log({ version, ts, iso, generator, nodeVersion, sqliteVersion, itemCount, siteCount, checksum });
 }
 
 // 🚀 插入站点元数据
@@ -192,6 +250,9 @@ function main() {
     for (const item of items) insertItem(item);
   });
   tx();
+
+  console.log("⏳ 写入 meta 信息...");
+  insertMeta();
 
   console.log("✅ 数据已保存到 bangumi.db");
 }
