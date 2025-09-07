@@ -64,6 +64,7 @@ function createTables() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       item_id INTEGER NOT NULL,
       site_name TEXT NOT NULL,
+      site_title TEXT NOT NULL,
       site_type TEXT NOT NULL,
       site_id TEXT,
       url TEXT,
@@ -96,17 +97,18 @@ function getSiteType(site: Site): "onair" | "info" | "resource" {
 }
 
 // 🚀 生成 resolved URL
-function resolveUrl(site: Site): { url: string | null; urlTemplate: string | null } {
+function resolveUrl(site: Site): { url: string | null; urlTemplate: string | null; siteTitle: string | null } {
   const meta = siteMeta[site.site as SiteList];
-  if (!meta) return { url: (site as any).url ?? null, urlTemplate: null };
+  if (!meta) return { url: (site as any).url ?? null, urlTemplate: null, siteTitle: null };
 
   const urlTemplate = meta.urlTemplate;
+  const siteTitle = meta.title;
   if ((site as any).url) {
-    return { url: (site as any).url, urlTemplate };
+    return { url: (site as any).url, urlTemplate, siteTitle };
   } else if ((site as any).id) {
-    return { url: urlTemplate.replace("{{id}}", (site as any).id), urlTemplate };
+    return { url: urlTemplate.replace("{{id}}", (site as any).id), urlTemplate, siteTitle };
   }
-  return { url: null, urlTemplate };
+  return { url: null, urlTemplate, siteTitle };
 }
 
 // 🚀 插入版本信息和生成时间
@@ -206,13 +208,13 @@ function insertItem(item: Item) {
 
   // 站点
   const insertSite = db.prepare(`
-    INSERT INTO sites (item_id, site_name, site_type, site_id, url, url_template, url_resolved, begin, end, broadcast, broadcast_begin, comment, regions)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO sites (item_id, site_name, site_title, site_type, site_id, url, url_template, url_resolved, begin, end, broadcast, broadcast_begin, comment, regions)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   item.sites.forEach(site => {
     const siteType = getSiteType(site);
-    const { url, urlTemplate } = resolveUrl(site);
+    const { url, urlTemplate, siteTitle } = resolveUrl(site);
 
     let regions = null;
     if ("regions" in site && Array.isArray((site as any).regions)) {
@@ -222,6 +224,7 @@ function insertItem(item: Item) {
     insertSite.run(
       itemId,
       site.site,
+      siteTitle,
       siteType,
       (site as any).id ?? null,
       (site as any).url ?? null,
