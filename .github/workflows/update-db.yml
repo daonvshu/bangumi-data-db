@@ -1,0 +1,85 @@
+name: Publish DB to GitHub Pages
+
+on:
+  schedule:
+    - cron: '0 20 * * *'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # 计算 bangumi-data checksum
+      - name: Compute data checksum
+        id: checksum
+        run: |
+          HASH=$(sha256sum node_modules/bangumi-data/dist/data.json | cut -d ' ' -f1)
+          echo "checksum=$HASH" >> $GITHUB_OUTPUT
+          echo "Current checksum: $HASH"
+
+      # 取 gh-pages
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages
+        continue-on-error: true
+
+      # 比较 checksum
+      - name: Compare checksum
+        id: compare
+        run: |
+          if [ -f gh-pages/data_checksum.txt ]; then
+            OLD=$(cat gh-pages/data_checksum.txt)
+            NEW=${{ steps.checksum.outputs.checksum }}
+
+            echo "Old checksum: $OLD"
+            echo "New checksum: $NEW"
+
+            if [ "$OLD" = "$NEW" ]; then
+              echo "changed=false" >> $GITHUB_OUTPUT
+              echo "Data unchanged"
+            else
+              echo "changed=true" >> $GITHUB_OUTPUT
+              echo "Data changed"
+            fi
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "First publish"
+          fi
+
+      # 只有变化才生成 DB
+      - name: Generate database
+        if: steps.compare.outputs.changed == 'true'
+        run: npm run gen-db
+
+      - name: Prepare dist
+        if: steps.compare.outputs.changed == 'true'
+        run: |
+          mkdir dist
+          cp bangumi.db dist/bangumi-latest.db
+          gzip -9 -c bangumi.db > dist/bangumi-latest.db.gz
+          echo "${{ steps.checksum.outputs.checksum }}" > dist/data_checksum.txt
+
+      - name: Deploy to GitHub Pages
+        if: steps.compare.outputs.changed == 'true'
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          publish_branch: gh-pages
+          enable_jekyll: false
+          keep_files: false
